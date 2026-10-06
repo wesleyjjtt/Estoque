@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Controle de Estoque</title>
+<style>
+:root{
+  --bg:#f7f7fa; --card:#fff; --text:#1a1a1a; --muted:#6b6b76;
+  --border:#e4e4ea; --accent:#2563eb; --accent-d:#1d4ed8;
+  --danger:#dc2626; --danger-bg:#fef2f2; --ok:#16a34a; --ok-bg:#f0fdf4;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111114; --card:#1a1a1e; --text:#f0f0f2; --muted:#9a9aa2;
+    --border:#2c2c33; --danger-bg:#2a1414; --ok-bg:#0f2317;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111114; --card:#1a1a1e; --text:#f0f0f2; --muted:#9a9aa2;
+  --border:#2c2c33; --danger-bg:#2a1414; --ok-bg:#0f2317;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  min-height:100%;
+}
+.wrap{max-width:1000px; margin:0 auto; padding:20px 16px 60px;}
+h1{font-size:1.4rem; margin:0 0 4px;}
+.sub{color:var(--muted); font-size:.85rem; margin:0 0 20px;}
+.summary{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px;}
+.stat{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 16px; flex:1; min-width:130px;}
+.stat .n{font-size:1.3rem; font-weight:700;}
+.stat .l{font-size:.75rem; color:var(--muted);}
+.stat.alert .n{color:var(--danger);}
+.card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:16px;}
+.card h2{font-size:1rem; margin:0 0 12px;}
+form{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px;}
+label{font-size:.75rem; color:var(--muted); display:block; margin-bottom:3px;}
+input,select{
+  width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px;
+  background:var(--bg); color:var(--text); font-size:.9rem;
+}
+button{
+  cursor:pointer; border:none; border-radius:8px; padding:9px 14px;
+  font-size:.85rem; font-weight:600;
+}
+.btn-primary{background:var(--accent); color:#fff; grid-column:1/-1;}
+.btn-primary:hover{background:var(--accent-d);}
+.toolbar{display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+.toolbar input{flex:1; min-width:180px;}
+table{width:100%; border-collapse:collapse; font-size:.85rem;}
+.tbl-wrap{overflow-x:auto;}
+th,td{padding:8px 6px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap;}
+th{color:var(--muted); font-weight:600; font-size:.75rem; text-transform:uppercase;}
+tr.low td:first-child{border-left:3px solid var(--danger);}
+.badge{padding:2px 8px; border-radius:99px; font-size:.7rem; font-weight:600;}
+.badge.low{background:var(--danger-bg); color:var(--danger);}
+.badge.ok{background:var(--ok-bg); color:var(--ok);}
+.actions{display:flex; gap:4px;}
+.actions button{padding:5px 8px; font-size:.75rem;}
+.btn-add{background:var(--ok-bg); color:var(--ok);}
+.btn-sub{background:var(--danger-bg); color:var(--danger);}
+.btn-del{background:transparent; color:var(--muted);}
+.empty{text-align:center; color:var(--muted); padding:24px; font-size:.85rem;}
+.log{max-height:180px; overflow-y:auto; font-size:.8rem;}
+.log div{padding:6px 0; border-bottom:1px solid var(--border); color:var(--muted);}
+.log span{color:var(--text); font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📦 Controle de Estoque</h1>
+  <p class="sub">Cadastre produtos, registre entradas/saídas e acompanhe alertas de estoque baixo.</p>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="card">
+    <h2>Adicionar produto</h2>
+    <form id="form-produto">
+      <div><label>Nome</label><input id="f-nome" required></div>
+      <div><label>Código</label><input id="f-codigo"></div>
+      <div><label>Categoria</label><input id="f-categoria"></div>
+      <div><label>Qtd. inicial</label><input id="f-qtd" type="number" min="0" value="0" required></div>
+      <div><label>Estoque mínimo</label><input id="f-min" type="number" min="0" value="5"></div>
+      <div><label>Preço custo (R$)</label><input id="f-custo" type="number" step="0.01" min="0" value="0"></div>
+      <div><label>Preço venda (R$)</label><input id="f-venda" type="number" step="0.01" min="0" value="0"></div>
+      <button type="submit" class="btn-primary">+ Adicionar produto</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Produtos</h2>
+    <div class="toolbar">
+      <input id="busca" placeholder="Buscar por nome ou código...">
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Produto</th><th>Código</th><th>Qtd</th><th>Status</th>
+          <th>Custo</th><th>Venda</th><th>Ações</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div id="empty" class="empty" style="display:none;">Nenhum produto cadastrado ainda.</div>
+  </div>
+
+  <div class="card">
+    <h2>Histórico de movimentações</h2>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const KEY = 'estoque_produtos_v1';
+const LOGKEY = 'estoque_log_v1';
+let produtos = [];
+let logs = [];
+
+function loadData(){
+  try{
+    const p = localStorage.getItem(KEY);
+    produtos = p ? JSON.parse(p) : [];
+  }catch(e){ produtos = []; }
+  try{
+    const l = localStorage.getItem(LOGKEY);
+    logs = l ? JSON.parse(l) : [];
+  }catch(e){ logs = []; }
+}
+function saveData(){
+  try{
+    localStorage.setItem(KEY, JSON.stringify(produtos));
+    localStorage.setItem(LOGKEY, JSON.stringify(logs));
+  }catch(e){ console.error('Erro ao salvar', e); }
+}
+function addLog(msg){
+  logs.unshift({msg, time:new Date().toLocaleString('pt-BR')});
+  logs = logs.slice(0,50);
+}
+function fmt(n){ return 'R$ ' + Number(n).toFixed(2).replace('.',','); }
+
+function render(){
+  const busca = document.getElementById('busca').value.toLowerCase();
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  const filtrados = produtos.filter(p =>
+    p.nome.toLowerCase().includes(busca) || (p.codigo||'').toLowerCase().includes(busca)
+  );
+  document.getElementById('empty').style.display = filtrados.length ? 'none' : 'block';
+
+  filtrados.forEach(p => {
+    const low = p.qtd <= p.min;
+    const tr = document.createElement('tr');
+    if(low) tr.className = 'low';
+    tr.innerHTML = `
+      <td>${p.nome}</td>
+      <td>${p.codigo||'-'}</td>
+      <td>${p.qtd}</td>
+      <td><span class="badge ${low?'low':'ok'}">${low?'Estoque baixo':'OK'}</span></td>
+      <td>${fmt(p.custo)}</td>
+      <td>${fmt(p.venda)}</td>
+      <td class="actions">
+        <button class="btn-add" onclick="mover('${p.id}',1)">+1</button>
+        <button class="btn-sub" onclick="mover('${p.id}',-1)">-1</button>
+        <button class="btn-del" onclick="remover('${p.id}')">🗑</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  const totalItens = produtos.reduce((s,p)=>s+p.qtd,0);
+  const totalValor = produtos.reduce((s,p)=>s+p.qtd*p.custo,0);
+  const baixos = produtos.filter(p=>p.qtd<=p.min).length;
+  document.getElementById('summary').innerHTML = `
+    <div class="stat"><div class="n">${produtos.length}</div><div class="l">Produtos cadastrados</div></div>
+    <div class="stat"><div class="n">${totalItens}</div><div class="l">Itens em estoque</div></div>
+    <div class="stat"><div class="n">${fmt(totalValor)}</div><div class="l">Valor total (custo)</div></div>
+    <div class="stat alert"><div class="n">${baixos}</div><div class="l">Alertas de estoque baixo</div></div>
+  `;
+
+  document.getElementById('log').innerHTML = logs.length
+    ? logs.map(l=>`<div><span>${l.time}</span> — ${l.msg}</div>`).join('')
+    : '<div>Nenhuma movimentação registrada ainda.</div>';
+
+  saveData();
+}
+
+function mover(id, delta){
+  const p = produtos.find(x=>x.id===id);
+  if(!p) return;
+  const novaQtd = p.qtd + delta;
+  if(novaQtd < 0) return;
+  p.qtd = novaQtd;
+  addLog(`${delta>0?'Entrada':'Saída'} de 1 un. — ${p.nome} (novo saldo: ${p.qtd})`);
+  render();
+}
+function remover(id){
+  const p = produtos.find(x=>x.id===id);
+  if(!p) return;
+  if(!confirm(`Remover "${p.nome}" do estoque?`)) return;
+  produtos = produtos.filter(x=>x.id!==id);
+  addLog(`Produto removido — ${p.nome}`);
+  render();
+}
+
+document.getElementById('form-produto').addEventListener('submit', e=>{
+  e.preventDefault();
+  const nome = document.getElementById('f-nome').value.trim();
+  if(!nome) return;
+  const p = {
+    id: Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    nome,
+    codigo: document.getElementById('f-codigo').value.trim(),
+    categoria: document.getElementById('f-categoria').value.trim(),
+    qtd: Number(document.getElementById('f-qtd').value)||0,
+    min: Number(document.getElementById('f-min').value)||0,
+    custo: Number(document.getElementById('f-custo').value)||0,
+    venda: Number(document.getElementById('f-venda').value)||0,
+  };
+  produtos.push(p);
+  addLog(`Produto cadastrado — ${p.nome} (qtd inicial: ${p.qtd})`);
+  e.target.reset();
+  document.getElementById('f-qtd').value = 0;
+  document.getElementById('f-min').value = 5;
+  document.getElementById('f-custo').value = 0;
+  document.getElementById('f-venda').value = 0;
+  render();
+});
+
+document.getElementById('busca').addEventListener('input', render);
+
+loadData();
+render();
+</script>
+</body>
+</html>
